@@ -186,7 +186,9 @@ async function watchAd() {
 
 function sendDone() {
   if (tg) {
-    tg.sendData(JSON.stringify({ action: 'ad_done', token: token }));
+    // Use deep link to send ad completion to bot (teloxide 0.12 doesn't support web_app_data)
+    const deepLink = 'https://t.me/Eulerdownloadmanagerbot?start=ad_done_' + encodeURIComponent(token);
+    tg.openTelegramLink(deepLink);
     setTimeout(() => tg.close(), 500);
   } else {
     document.getElementById('status-done').textContent = 'Open this bot in Telegram to get your download.';
