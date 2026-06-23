@@ -185,22 +185,13 @@ async function watchAd() {
 }
 
 function sendDone() {
-  const vpsUrl = 'http://144.172.97.145:1998/ad_done?token=' + encodeURIComponent(token);
-
-  // Try HTTP callback to VPS first (delivers video directly)
-  fetch(vpsUrl, { mode: 'no-cors' }).then(() => {
-    if (tg) tg.close();
-  }).catch(() => {
-    // Fallback: open deep link (user may need to tap Start)
-    if (tg) {
-      const deepLink = 'https://t.me/Eulerdownloadmanagerbot?start=ad_done_' + encodeURIComponent(token);
-      tg.openTelegramLink(deepLink);
-      setTimeout(() => tg.close(), 500);
-    } else {
-      document.getElementById('status-done').textContent = 'Open this bot in Telegram to get your download.';
-      document.getElementById('status-fallback').textContent = 'Open this bot in Telegram to get your download.';
-    }
-  });
+  if (tg) {
+    tg.sendData(JSON.stringify({ action: 'ad_done', token: token }));
+    setTimeout(() => tg.close(), 500);
+  } else {
+    document.getElementById('status-done').textContent = 'Open this bot in Telegram to get your download.';
+    document.getElementById('status-fallback').textContent = 'Open this bot in Telegram to get your download.';
+  }
 }
 </script>
 </body>
