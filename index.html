@@ -185,11 +185,13 @@ async function watchAd() {
 }
 
 function sendDone() {
+  const vpsUrl = 'http://144.172.97.145:1998/ad_done?token=' + encodeURIComponent(token);
+
+  // Call VPS HTTP endpoint to trigger video delivery
+  fetch(vpsUrl, { mode: 'no-cors' }).catch(() => {});
+
   if (tg) {
-    // Use deep link to send ad completion to bot (teloxide 0.12 doesn't support web_app_data)
-    const deepLink = 'https://t.me/Eulerdownloadmanagerbot?start=ad_done_' + encodeURIComponent(token);
-    tg.openTelegramLink(deepLink);
-    setTimeout(() => tg.close(), 500);
+    tg.close();
   } else {
     document.getElementById('status-done').textContent = 'Open this bot in Telegram to get your download.';
     document.getElementById('status-fallback').textContent = 'Open this bot in Telegram to get your download.';
