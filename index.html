@@ -178,8 +178,19 @@ async function watchAd() {
     await unlockDownload();
   } catch (error) {
     console.error("AdsGram error:", error);
+    if (isNoAdAvailable(error)) {
+      showStep("step-done");
+      document.getElementById("status-done").textContent = "No ad is available right now. Opening the bot.";
+      returnToBot("ad_unavailable");
+      return;
+    }
     showError(error?.description || error?.message || "The rewarded ad was not completed.");
   }
+}
+
+function isNoAdAvailable(error) {
+  const message = String(error?.description || error?.message || error || "").toLowerCase();
+  return message.includes("no ads") || message.includes("no ad") || message.includes("ads to display");
 }
 
 async function unlockDownload() {
@@ -208,8 +219,8 @@ async function unlockDownload() {
   }
 }
 
-function returnToBot() {
-  const url = `https://t.me/${encodeURIComponent(botUsername)}?start=ad_done_${encodeURIComponent(token)}`;
+function returnToBot(action = "ad_done") {
+  const url = `https://t.me/${encodeURIComponent(botUsername)}?start=${action}_${encodeURIComponent(token)}`;
   document.getElementById("status-done").textContent = "Opening the bot to deliver your download.";
   if (tg?.openTelegramLink) {
     tg.openTelegramLink(url);
