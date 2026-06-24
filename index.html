@@ -4,12 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>EULER Download Manager</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script src="https://sad.adsgram.ai/js/sad.min.js"></script>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: #0a0a0a;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: #0b0d12;
   color: #fff;
   min-height: 100vh;
   display: flex;
@@ -24,62 +25,49 @@ body {
   width: 100%;
   max-width: 400px;
 }
-.logo {
-  font-size: 48px;
-  margin-bottom: 16px;
-}
-.title {
-  font-size: 22px;
-  font-weight: 700;
-  margin-bottom: 8px;
-  background: linear-gradient(135deg, #667eea, #764ba2);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
+.logo { font-size: 48px; margin-bottom: 16px; }
+.title { font-size: 22px; font-weight: 700; margin-bottom: 8px; }
 .subtitle {
   font-size: 14px;
-  color: #888;
-  margin-bottom: 32px;
+  color: #a5adba;
+  line-height: 1.45;
+  margin-bottom: 28px;
 }
 .btn {
-  display: inline-block;
-  padding: 14px 32px;
-  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 24px;
+  border-radius: 8px;
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 650;
   cursor: pointer;
-  border: none;
-  transition: all 0.2s;
+  border: 0;
+  transition: opacity 0.2s, transform 0.2s;
   width: 100%;
   max-width: 300px;
+  min-height: 48px;
 }
-.btn-primary {
-  background: linear-gradient(135deg, #667eea, #764ba2);
-  color: #fff;
-}
-.btn-primary:hover { opacity: 0.9; transform: scale(1.02); }
-.btn-primary:active { transform: scale(0.98); }
-.btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  transform: none;
-}
+.btn-primary { background: #4f7cff; color: #fff; }
+.btn-primary:hover { opacity: 0.92; transform: translateY(-1px); }
+.btn-primary:active { transform: translateY(0); }
+.btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
 .status {
-  margin-top: 20px;
-  font-size: 14px;
-  color: #aaa;
-  min-height: 20px;
+  margin-top: 18px;
+  font-size: 13px;
+  color: #a5adba;
+  min-height: 18px;
+  line-height: 1.4;
 }
 .spinner {
   display: inline-block;
   width: 20px;
   height: 20px;
-  border: 3px solid rgba(255,255,255,0.3);
+  border: 3px solid rgba(255,255,255,0.28);
   border-top-color: #fff;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
-  margin-right: 8px;
-  vertical-align: middle;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 .hidden { display: none !important; }
@@ -88,52 +76,48 @@ body {
 </head>
 <body>
 <div class="container">
-  <!-- Step 1: Show ad button -->
   <div id="step-wait" class="hidden">
-    <div class="logo">🎬</div>
+    <div class="logo">▶</div>
     <div class="title">EULER Download Manager</div>
-    <div class="subtitle">Watch a short ad to unlock your download</div>
+    <div class="subtitle">Watch the rewarded ad to unlock this download.</div>
     <button id="btn-watch" class="btn btn-primary" onclick="watchAd()">
-      Watch Ad · Unlock Download
+      Watch Ad
     </button>
     <div id="status-wait" class="status"></div>
   </div>
 
-  <!-- Step 2: Ad playing -->
   <div id="step-loading" class="hidden">
     <div class="logo"><span class="spinner"></span></div>
     <div class="title">Loading ad...</div>
-    <div class="subtitle">Please wait</div>
+    <div class="subtitle">Please keep this window open.</div>
   </div>
 
-  <!-- Step 3: Ad complete -->
   <div id="step-done" class="hidden">
-    <div class="success-icon">✅</div>
-    <div class="title">Ad Complete!</div>
-    <div class="subtitle">Your download is ready</div>
-    <div class="status" id="status-done">Returning to bot...</div>
+    <div class="success-icon">✓</div>
+    <div class="title">Ad Complete</div>
+    <div class="subtitle">Returning to the bot to deliver your download.</div>
+    <div class="status" id="status-done"></div>
   </div>
 
-  <!-- Step 4: Error/fallback -->
-  <div id="step-fallback" class="hidden">
-    <div class="logo">📢</div>
-    <div class="title">Thank you!</div>
-    <div class="subtitle">Your download has been unlocked</div>
-    <button id="btn-continue" class="btn btn-primary" onclick="sendDone()">
-      Continue · Get Download
+  <div id="step-error" class="hidden">
+    <div class="logo">!</div>
+    <div class="title">Ad Not Completed</div>
+    <div class="subtitle" id="error-message">Please try again. The download unlocks only after the rewarded ad finishes.</div>
+    <button id="btn-retry" class="btn btn-primary" onclick="watchAd()">
+      Try Again
     </button>
-    <div id="status-fallback" class="status"></div>
+    <div id="status-error" class="status"></div>
   </div>
 </div>
 
 <script>
 const tg = window.Telegram?.WebApp;
-let adController = null;
-let blockId = '33960'; // AdsGram block ID
-
-// Read token from URL params (passed by bot)
 const params = new URLSearchParams(window.location.search);
-const token = params.get('token') || '';
+const token = params.get("token") || "";
+const apiBase = (params.get("api") || "").replace(/\/$/, "");
+const blockId = params.get("block") || "33960";
+const botUsername = params.get("bot") || "Eulerdownloadmanagerbot";
+let adController = null;
 
 if (tg) {
   tg.ready();
@@ -141,57 +125,98 @@ if (tg) {
   tg.MainButton.hide();
 }
 
-// Show the wait step on load
-document.getElementById('step-wait').classList.remove('hidden');
+showStep("step-wait");
+if (!token) {
+  showError("Missing unlock token. Please return to the bot and tap Watch Ad again.");
+}
+
+function showStep(id) {
+  ["step-wait", "step-loading", "step-done", "step-error"].forEach((stepId) => {
+    document.getElementById(stepId).classList.toggle("hidden", stepId !== id);
+  });
+}
+
+function setWatchButtonLoading(isLoading) {
+  const btn = document.getElementById("btn-watch");
+  btn.disabled = isLoading;
+  btn.innerHTML = isLoading ? '<span class="spinner"></span> Loading ad...' : "Watch Ad";
+}
+
+function showError(message) {
+  document.getElementById("error-message").textContent = message;
+  document.getElementById("btn-retry").disabled = !token;
+  setWatchButtonLoading(false);
+  showStep("step-error");
+}
 
 async function watchAd() {
-  const btn = document.getElementById('btn-watch');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span> Loading ad...';
+  if (!token) {
+    showError("Missing unlock token. Please return to the bot and tap Watch Ad again.");
+    return;
+  }
+
+  setWatchButtonLoading(true);
 
   try {
-    if (typeof window.Adsgram === 'undefined') {
-      throw new Error('AdsGram SDK not loaded');
+    if (!window.Adsgram) {
+      throw new Error("AdsGram SDK did not load. Check the Mini App domain and network.");
     }
 
-    adController = window.Adsgram.init({ blockId: blockId });
-
+    adController = adController || window.Adsgram.init({ blockId });
     if (!adController) {
-      throw new Error('AdsGram init failed');
+      throw new Error("AdsGram could not initialize this ad block.");
     }
 
-    document.getElementById('step-wait').classList.add('hidden');
-    document.getElementById('step-loading').classList.remove('hidden');
-
+    showStep("step-loading");
     const result = await adController.show();
 
-    if (result && result.done) {
-      // Ad watched successfully
-      document.getElementById('step-loading').classList.add('hidden');
-      document.getElementById('step-done').classList.remove('hidden');
-
-      setTimeout(() => {
-        sendDone();
-      }, 1500);
-    } else {
-      throw new Error('Ad not completed');
+    if (!result || result.done !== true) {
+      throw new Error(result?.description || "The rewarded ad was not completed.");
     }
-  } catch (e) {
-    console.log('AdsGram error:', e);
-    // Fallback: just send done anyway after showing message
-    document.getElementById('step-loading').classList.add('hidden');
-    document.getElementById('step-fallback').classList.remove('hidden');
+
+    showStep("step-done");
+    await unlockDownload();
+  } catch (error) {
+    console.error("AdsGram error:", error);
+    showError(error?.description || error?.message || "The rewarded ad was not completed.");
   }
 }
 
-function sendDone() {
-  if (tg) {
-    tg.sendData(JSON.stringify({ action: 'ad_done', token: token }));
-    setTimeout(() => tg.close(), 500);
-  } else {
-    document.getElementById('status-done').textContent = 'Open this bot in Telegram to get your download.';
-    document.getElementById('status-fallback').textContent = 'Open this bot in Telegram to get your download.';
+async function unlockDownload() {
+  if (!apiBase) {
+    returnToBot();
+    return;
   }
+
+  try {
+    const response = await fetch(`${apiBase}/ad_done?token=${encodeURIComponent(token)}`, {
+      method: "GET",
+      mode: "cors",
+      cache: "no-store"
+    });
+    const payload = await response.json();
+
+    if (!response.ok || !payload.ok) {
+      throw new Error(payload.error || "The unlock session expired. Please request the download again.");
+    }
+
+    document.getElementById("status-done").textContent = "Done. You can close this window.";
+    setTimeout(() => tg?.close(), 700);
+  } catch (error) {
+    console.warn("Backend unlock failed, using Telegram deep link:", error);
+    returnToBot();
+  }
+}
+
+function returnToBot() {
+  const url = `https://t.me/${encodeURIComponent(botUsername)}?start=ad_done_${encodeURIComponent(token)}`;
+  document.getElementById("status-done").textContent = "Opening the bot to deliver your download.";
+  if (tg?.openTelegramLink) {
+    tg.openTelegramLink(url);
+  } else {
+    window.location.href = url;
+  }
+  setTimeout(() => tg?.close(), 900);
 }
 </script>
 </body>
