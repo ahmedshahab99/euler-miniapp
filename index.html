@@ -117,7 +117,15 @@ const token = params.get("token") || "";
 const apiBase = (params.get("api") || "").replace(/\/$/, "");
 const blockId = params.get("block") || "33960";
 const botUsername = params.get("bot") || "Eulerdownloadmanagerbot";
+const providers = (params.get("providers") || "adsgram,monetag")
+  .split(",")
+  .map((provider) => provider.trim().toLowerCase())
+  .filter(Boolean);
+const monetagZone = params.get("monetagZone") || "";
+const monetagSdk = params.get("monetagSdk") || "";
+const monetagFunction = params.get("monetagFunction") || (monetagZone ? `show_${monetagZone}` : "");
 let adController = null;
+let monetagLoadPromise = null;
 
 if (tg) {
   tg.ready();
@@ -156,41 +164,142 @@ async function watchAd() {
   }
 
   setWatchButtonLoading(true);
+  showStep("step-loading");
 
-  try {
-    if (!window.Adsgram) {
-      throw new Error("AdsGram SDK did not load. Check the Mini App domain and network.");
-    }
-
-    adController = adController || window.Adsgram.init({ blockId });
-    if (!adController) {
-      throw new Error("AdsGram could not initialize this ad block.");
-    }
-
-    showStep("step-loading");
-    const result = await adController.show();
-
-    if (!result || result.done !== true) {
-      throw new Error(result?.description || "The rewarded ad was not completed.");
-    }
-
-    showStep("step-done");
-    await unlockDownload();
-  } catch (error) {
-    console.error("AdsGram error:", error);
-    if (isNoAdAvailable(error)) {
+  const attempts = [];
+  for (const provider of providers) {
+    try {
+      updateLoadingText(provider);
+      await showProviderAd(provider);
       showStep("step-done");
-      document.getElementById("status-done").textContent = "No ad is available right now. Opening the bot.";
-      returnToBot("ad_unavailable");
+      document.getElementById("status-done").textContent = "Ad completed. Opening the bot.";
+      await unlockDownload();
       return;
+    } catch (error) {
+      console.warn(`${provider} failed:`, error);
+      attempts.push({ provider, error });
+      if (isUserCancelled(error)) {
+        showError("Ad was not completed. Please watch the ad to unlock your download.");
+        return;
+      }
     }
-    showError(error?.description || error?.message || "The rewarded ad was not completed.");
   }
+
+  if (attempts.length > 0 && attempts.every(({ error }) => isProviderUnavailable(error))) {
+    showStep("step-done");
+    document.getElementById("status-done").textContent = "No ad is available right now. Opening the bot.";
+    returnToBot("ad_unavailable");
+    return;
+  }
+
+  showError("No ad provider could start right now. Please try again.");
 }
 
-function isNoAdAvailable(error) {
+function updateLoadingText(provider) {
+  const names = {
+    adsgram: "AdsGram",
+    monetag: "Monetag"
+  };
+  document.querySelector("#step-loading .title").textContent = `Loading ${names[provider] || "ad"}...`;
+}
+
+async function showProviderAd(provider) {
+  if (provider === "adsgram") {
+    return showAdsGramAd();
+  }
+  if (provider === "monetag") {
+    return showMonetagAd();
+  }
+  throw unavailableError(`Unknown ad provider: ${provider}`);
+}
+
+async function showAdsGramAd() {
+  if (!window.Adsgram) {
+    throw unavailableError("AdsGram SDK did not load.");
+  }
+
+  adController = adController || window.Adsgram.init({ blockId });
+  if (!adController) {
+    throw unavailableError("AdsGram could not initialize this ad block.");
+  }
+
+  const result = await adController.show();
+  if (!result || result.done !== true) {
+    throw new Error(result?.description || "The rewarded ad was not completed.");
+  }
+  return result;
+}
+
+async function showMonetagAd() {
+  if (!monetagZone || !monetagSdk || !monetagFunction) {
+    throw unavailableError("Monetag is not configured.");
+  }
+
+  await loadMonetagSdk();
+  const showAd = window[monetagFunction];
+  if (typeof showAd !== "function") {
+    throw unavailableError("Monetag SDK function is not available.");
+  }
+
+  return showAd({
+    type: "end",
+    ymid: token,
+    requestVar: "download_unlock",
+    catchIfNoFeed: true
+  });
+}
+
+function loadMonetagSdk() {
+  if (typeof window[monetagFunction] === "function") {
+    return Promise.resolve();
+  }
+  if (monetagLoadPromise) {
+    return monetagLoadPromise;
+  }
+
+  monetagLoadPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = monetagSdk;
+    script.async = true;
+    script.dataset.zone = monetagZone;
+    script.dataset.sdk = monetagFunction;
+    script.onload = resolve;
+    script.onerror = () => reject(unavailableError("Monetag SDK failed to load."));
+    document.head.appendChild(script);
+  });
+  return monetagLoadPromise;
+}
+
+function isProviderUnavailable(error) {
   const message = String(error?.description || error?.message || error || "").toLowerCase();
-  return message.includes("no ads") || message.includes("no ad") || message.includes("ads to display");
+  return Boolean(error?.adUnavailable)
+    || message.includes("no ads")
+    || message.includes("no ad")
+    || message.includes("ads to display")
+    || message.includes("ad feed is empty")
+    || message.includes("no feed")
+    || message.includes("network error")
+    || message.includes("timeout")
+    || message.includes("sdk did not load")
+    || message.includes("failed to load")
+    || message.includes("not configured")
+    || message.includes("misconfigured");
+}
+
+function isUserCancelled(error) {
+  const message = String(error?.description || error?.message || error || "").toLowerCase();
+  return message.includes("skip")
+    || message.includes("skipped")
+    || message.includes("cancel")
+    || message.includes("cancelled")
+    || message.includes("canceled")
+    || message.includes("closed by user");
+}
+
+function unavailableError(message) {
+  const error = new Error(message);
+  error.adUnavailable = true;
+  return error;
 }
 
 async function unlockDownload() {
