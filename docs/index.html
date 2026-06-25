@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>EULER Download Manager</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
-<script src="https://sad.adsgram.ai/js/sad.min.js"></script>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
@@ -134,9 +133,8 @@ const tg = window.Telegram?.WebApp;
 const params = new URLSearchParams(window.location.search);
 const token = params.get("token") || "";
 const apiBase = (params.get("api") || "").replace(/\/$/, "");
-const blockId = params.get("block") || "33960";
 const botUsername = params.get("bot") || "Eulerdownloadmanagerbot";
-const providers = (params.get("providers") || "adsgram,aads,monetag,directlink")
+const providers = (params.get("providers") || "aads")
   .split(",")
   .map((provider) => provider.trim().toLowerCase())
   .filter(Boolean);
@@ -147,7 +145,6 @@ const aadsUnit = params.get("aadsUnit") || "";
 const aadsWait = Math.max(8, Math.min(60, Number(params.get("aadsWait") || "15")));
 const directAdUrl = params.get("directAdUrl") || "";
 const directWait = Math.max(5, Math.min(60, Number(params.get("directWait") || "12")));
-let adController = null;
 let monetagLoadPromise = null;
 let pendingUnlockAction = "ad_done";
 
@@ -224,7 +221,6 @@ async function watchAd() {
 
 function updateLoadingText(provider) {
   const names = {
-    adsgram: "AdsGram",
     aads: "Sponsor",
     monetag: "Monetag",
     directlink: "Sponsor",
@@ -235,9 +231,6 @@ function updateLoadingText(provider) {
 }
 
 async function showProviderAd(provider) {
-  if (provider === "adsgram") {
-    return showAdsGramAd();
-  }
   if (provider === "aads") {
     return showAadsAd();
   }
@@ -248,23 +241,6 @@ async function showProviderAd(provider) {
     return showDirectLinkAd();
   }
   throw unavailableError(`Unknown ad provider: ${provider}`);
-}
-
-async function showAdsGramAd() {
-  if (!window.Adsgram) {
-    throw unavailableError("AdsGram SDK did not load.");
-  }
-
-  adController = adController || window.Adsgram.init({ blockId });
-  if (!adController) {
-    throw unavailableError("AdsGram could not initialize this ad block.");
-  }
-
-  const result = await adController.show();
-  if (!result || result.done !== true) {
-    throw new Error(result?.description || "The rewarded ad was not completed.");
-  }
-  return result;
 }
 
 async function showMonetagAd() {
