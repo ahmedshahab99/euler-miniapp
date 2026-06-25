@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>EULER Download Manager</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="https://sad.adsgram.ai/js/sad.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: #0b0d12;
+  color: #fff;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.container {
+  text-align: center;
+  padding: 20px;
+  width: 100%;
+  max-width: 400px;
+}
+.logo { font-size: 48px; margin-bottom: 16px; }
+.title { font-size: 22px; font-weight: 700; margin-bottom: 8px; }
+.subtitle {
+  font-size: 14px;
+  color: #a5adba;
+  line-height: 1.45;
+  margin-bottom: 28px;
+}
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 24px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 650;
+  cursor: pointer;
+  border: 0;
+  transition: opacity 0.2s, transform 0.2s;
+  width: 100%;
+  max-width: 300px;
+  min-height: 48px;
+}
+.btn-primary { background: #4f7cff; color: #fff; }
+.btn-primary:hover { opacity: 0.92; transform: translateY(-1px); }
+.btn-primary:active { transform: translateY(0); }
+.btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
+.status {
+  margin-top: 18px;
+  font-size: 13px;
+  color: #a5adba;
+  min-height: 18px;
+  line-height: 1.4;
+}
+.ad-frame {
+  width: 100%;
+  min-height: 120px;
+  margin: 18px auto 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ad-frame iframe {
+  border: 0;
+  width: min(100%, 360px);
+  min-height: 100px;
+  overflow: hidden;
+  display: block;
+}
+.spinner {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border: 3px solid rgba(255,255,255,0.28);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.hidden { display: none !important; }
+.success-icon { font-size: 64px; margin-bottom: 16px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div id="step-wait" class="hidden">
+    <div class="logo">▶</div>
+    <div class="title">EULER Download Manager</div>
+    <div class="subtitle">Watch the rewarded ad to unlock this download.</div>
+    <button id="btn-watch" class="btn btn-primary" onclick="watchAd()">
+      Watch Ad
+    </button>
+    <div id="status-wait" class="status"></div>
+  </div>
+
+  <div id="step-loading" class="hidden">
+    <div class="logo"><span class="spinner"></span></div>
+    <div class="title">Loading ad...</div>
+    <div class="subtitle">Please keep this window open.</div>
+    <div id="ad-frame" class="ad-frame"></div>
+  </div>
+
+  <div id="step-done" class="hidden">
+    <div class="success-icon">✓</div>
+    <div class="title">Ad Complete</div>
+    <div class="subtitle">Your download is unlocked.</div>
+    <button id="btn-get-video" class="btn btn-primary" onclick="finishUnlock()">
+      Get Video
+    </button>
+    <div class="status" id="status-done"></div>
+  </div>
+
+  <div id="step-error" class="hidden">
+    <div class="logo">!</div>
+    <div class="title">Ad Not Completed</div>
+    <div class="subtitle" id="error-message">Please try again. The download unlocks only after the rewarded ad finishes.</div>
+    <button id="btn-retry" class="btn btn-primary" onclick="watchAd()">
+      Try Again
+    </button>
+    <div id="status-error" class="status"></div>
+  </div>
+</div>
+
+<script>
+const tg = window.Telegram?.WebApp;
+const params = new URLSearchParams(window.location.search);
+const token = params.get("token") || "";
+const apiBase = (params.get("api") || "").replace(/\/$/, "");
+const blockId = params.get("block") || "33960";
+const botUsername = params.get("bot") || "Eulerdownloadmanagerbot";
+const providers = (params.get("providers") || "adsgram,aads,monetag,directlink")
+  .split(",")
+  .map((provider) => provider.trim().toLowerCase())
+  .filter(Boolean);
+const monetagZone = params.get("monetagZone") || "";
+const monetagSdk = params.get("monetagSdk") || "";
+const monetagFunction = params.get("monetagFunction") || (monetagZone ? `show_${monetagZone}` : "");
+const aadsUnit = params.get("aadsUnit") || "";
+const aadsWait = Math.max(8, Math.min(60, Number(params.get("aadsWait") || "15")));
+const directAdUrl = params.get("directAdUrl") || "";
+const directWait = Math.max(5, Math.min(60, Number(params.get("directWait") || "12")));
+let adController = null;
+let monetagLoadPromise = null;
+let pendingUnlockAction = "ad_done";
+
+if (tg) {
+  tg.ready();
+  tg.expand();
+  tg.MainButton.hide();
+  tg.MainButton.onClick(finishUnlock);
+}
+
+showStep("step-wait");
+if (!token) {
+  showError("Missing unlock token. Please return to the bot and tap Watch Ad again.");
+}
+
+function showStep(id) {
+  ["step-wait", "step-loading", "step-done", "step-error"].forEach((stepId) => {
+    document.getElementById(stepId).classList.toggle("hidden", stepId !== id);
+  });
+  if (id !== "step-loading") {
+    clearAdFrame();
+  }
+  if (id !== "step-done" && tg?.MainButton) {
+    tg.MainButton.hide();
+  }
+}
+
+function setWatchButtonLoading(isLoading) {
+  const btn = document.getElementById("btn-watch");
+  btn.disabled = isLoading;
+  btn.innerHTML = isLoading ? '<span class="spinner"></span> Loading ad...' : "Watch Ad";
+}
+
+function showError(message) {
+  document.getElementById("error-message").textContent = message;
+  document.getElementById("btn-retry").disabled = !token;
+  setWatchButtonLoading(false);
+  showStep("step-error");
+}
+
+async function watchAd() {
+  if (!token) {
+    showError("Missing unlock token. Please return to the bot and tap Watch Ad again.");
+    return;
+  }
+
+  setWatchButtonLoading(true);
+  showStep("step-loading");
+
+  const attempts = [];
+  for (const provider of providers) {
+    try {
+      updateLoadingText(provider);
+      await showProviderAd(provider);
+      showUnlockButton("ad_done", "Ad completed. Tap below to get your video.");
+      return;
+    } catch (error) {
+      console.warn(`${provider} failed:`, error);
+      attempts.push({ provider, error });
+      if (isUserCancelled(error)) {
+        showError("Ad was not completed. Please watch the ad to unlock your download.");
+        return;
+      }
+    }
+  }
+
+  if (attempts.length > 0 && attempts.every(({ error }) => isProviderUnavailable(error))) {
+    showUnlockButton("ad_unavailable", "No ad is available right now. Tap below to get your video.");
+    return;
+  }
+
+  showError("No ad provider could start right now. Please try again.");
+}
+
+function updateLoadingText(provider) {
+  const names = {
+    adsgram: "AdsGram",
+    aads: "Sponsor",
+    monetag: "Monetag",
+    directlink: "Sponsor",
+    adsterra: "Sponsor"
+  };
+  document.querySelector("#step-loading .subtitle").textContent = "Please keep this window open.";
+  document.querySelector("#step-loading .title").textContent = `Loading ${names[provider] || "ad"}...`;
+}
+
+async function showProviderAd(provider) {
+  if (provider === "adsgram") {
+    return showAdsGramAd();
+  }
+  if (provider === "aads") {
+    return showAadsAd();
+  }
+  if (provider === "monetag") {
+    return showMonetagAd();
+  }
+  if (provider === "directlink" || provider === "adsterra") {
+    return showDirectLinkAd();
+  }
+  throw unavailableError(`Unknown ad provider: ${provider}`);
+}
+
+async function showAdsGramAd() {
+  if (!window.Adsgram) {
+    throw unavailableError("AdsGram SDK did not load.");
+  }
+
+  adController = adController || window.Adsgram.init({ blockId });
+  if (!adController) {
+    throw unavailableError("AdsGram could not initialize this ad block.");
+  }
+
+  const result = await adController.show();
+  if (!result || result.done !== true) {
+    throw new Error(result?.description || "The rewarded ad was not completed.");
+  }
+  return result;
+}
+
+async function showMonetagAd() {
+  if (!monetagZone || !monetagSdk || !monetagFunction) {
+    throw unavailableError("Monetag is not configured.");
+  }
+
+  await loadMonetagSdk();
+  const showAd = window[monetagFunction];
+  if (typeof showAd !== "function") {
+    throw unavailableError("Monetag SDK function is not available.");
+  }
+
+  return showAd({
+    type: "end",
+    ymid: token,
+    requestVar: "download_unlock",
+    catchIfNoFeed: true
+  });
+}
+
+function loadMonetagSdk() {
+  if (typeof window[monetagFunction] === "function") {
+    return Promise.resolve();
+  }
+  if (monetagLoadPromise) {
+    return monetagLoadPromise;
+  }
+
+  monetagLoadPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = monetagSdk;
+    script.async = true;
+    script.dataset.zone = monetagZone;
+    script.dataset.sdk = monetagFunction;
+    script.onload = resolve;
+    script.onerror = () => reject(unavailableError("Monetag SDK failed to load."));
+    document.head.appendChild(script);
+  });
+  return monetagLoadPromise;
+}
+
+async function showAadsAd() {
+  if (!aadsUnit) {
+    throw unavailableError("A-ADS unit is not configured.");
+  }
+
+  const frame = document.createElement("iframe");
+  frame.dataset.aa = aadsUnit;
+  frame.src = `https://acceptable.a-ads.com/${encodeURIComponent(aadsUnit)}/?size=Adaptive`;
+  frame.loading = "eager";
+  frame.referrerPolicy = "no-referrer-when-downgrade";
+  frame.title = "Sponsored ad";
+
+  const adFrame = document.getElementById("ad-frame");
+  adFrame.replaceChildren(frame);
+
+  for (let remaining = aadsWait; remaining > 0; remaining -= 1) {
+    document.querySelector("#step-loading .title").textContent = "Sponsor";
+    document.querySelector("#step-loading .subtitle").textContent =
+      `Keep this open for ${remaining}s to unlock your download.`;
+    await sleep(1000);
+  }
+  return { done: true, provider: "aads" };
+}
+
+async function showDirectLinkAd() {
+  if (!directAdUrl) {
+    throw unavailableError("Direct ad link is not configured.");
+  }
+
+  openAdLink(directAdUrl);
+  for (let remaining = directWait; remaining > 0; remaining -= 1) {
+    document.querySelector("#step-loading .title").textContent = "Sponsor opened";
+    document.querySelector("#step-loading .subtitle").textContent =
+      `Return here in ${remaining}s to unlock your download.`;
+    await sleep(1000);
+  }
+  return { done: true, provider: "directlink" };
+}
+
+function openAdLink(url) {
+  if (tg?.openLink) {
+    tg.openLink(url, { try_instant_view: false });
+    return;
+  }
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function clearAdFrame() {
+  document.getElementById("ad-frame")?.replaceChildren();
+}
+
+function isProviderUnavailable(error) {
+  const message = String(error?.description || error?.message || error || "").toLowerCase();
+  return Boolean(error?.adUnavailable)
+    || message.includes("no ads")
+    || message.includes("no ad")
+    || message.includes("ads to display")
+    || message.includes("ad feed is empty")
+    || message.includes("no feed")
+    || message.includes("network error")
+    || message.includes("timeout")
+    || message.includes("sdk did not load")
+    || message.includes("failed to load")
+    || message.includes("not configured")
+    || message.includes("misconfigured");
+}
+
+function isUserCancelled(error) {
+  const message = String(error?.description || error?.message || error || "").toLowerCase();
+  return message.includes("skip")
+    || message.includes("skipped")
+    || message.includes("cancel")
+    || message.includes("cancelled")
+    || message.includes("canceled")
+    || message.includes("closed by user");
+}
+
+function unavailableError(message) {
+  const error = new Error(message);
+  error.adUnavailable = true;
+  return error;
+}
+
+function showUnlockButton(action, message) {
+  pendingUnlockAction = action;
+  showStep("step-done");
+  document.getElementById("status-done").textContent = message;
+  const btn = document.getElementById("btn-get-video");
+  btn.disabled = false;
+  btn.textContent = "Get Video";
+  if (tg?.MainButton) {
+    tg.MainButton.setText("Get Video");
+    tg.MainButton.show();
+  }
+}
+
+async function finishUnlock() {
+  const btn = document.getElementById("btn-get-video");
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Opening bot...';
+  if (tg?.MainButton) {
+    tg.MainButton.hide();
+  }
+  await unlockDownload(pendingUnlockAction);
+}
+
+async function unlockDownload(action = "ad_done") {
+  if (!apiBase) {
+    returnToBot(action);
+    return;
+  }
+
+  try {
+    const response = await fetch(`${apiBase}/ad_done?token=${encodeURIComponent(token)}`, {
+      method: "GET",
+      mode: "cors",
+      cache: "no-store"
+    });
+    const payload = await response.json();
+
+    if (!response.ok || !payload.ok) {
+      throw new Error(payload.error || "The unlock session expired. Please request the download again.");
+    }
+
+    document.getElementById("status-done").textContent = "Done. You can close this window.";
+    setTimeout(() => tg?.close(), 700);
+  } catch (error) {
+    console.warn("Backend unlock failed, using Telegram deep link:", error);
+    returnToBot(action);
+  }
+}
+
+function returnToBot(action = "ad_done") {
+  const url = `https://t.me/${encodeURIComponent(botUsername)}?start=${action}_${encodeURIComponent(token)}`;
+  document.getElementById("status-done").textContent = "Opening the bot to deliver your download.";
+  if (tg?.openTelegramLink) {
+    tg.openTelegramLink(url);
+  } else {
+    window.location.href = url;
+  }
+  setTimeout(() => tg?.close(), 900);
+}
+</script>
+</body>
+</html>
