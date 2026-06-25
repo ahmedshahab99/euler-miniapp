@@ -117,13 +117,15 @@ const token = params.get("token") || "";
 const apiBase = (params.get("api") || "").replace(/\/$/, "");
 const blockId = params.get("block") || "33960";
 const botUsername = params.get("bot") || "Eulerdownloadmanagerbot";
-const providers = (params.get("providers") || "adsgram,monetag")
+const providers = (params.get("providers") || "adsgram,monetag,directlink")
   .split(",")
   .map((provider) => provider.trim().toLowerCase())
   .filter(Boolean);
 const monetagZone = params.get("monetagZone") || "";
 const monetagSdk = params.get("monetagSdk") || "";
 const monetagFunction = params.get("monetagFunction") || (monetagZone ? `show_${monetagZone}` : "");
+const directAdUrl = params.get("directAdUrl") || "";
+const directWait = Math.max(5, Math.min(60, Number(params.get("directWait") || "12")));
 let adController = null;
 let monetagLoadPromise = null;
 
@@ -198,7 +200,9 @@ async function watchAd() {
 function updateLoadingText(provider) {
   const names = {
     adsgram: "AdsGram",
-    monetag: "Monetag"
+    monetag: "Monetag",
+    directlink: "Sponsor",
+    adsterra: "Sponsor"
   };
   document.querySelector("#step-loading .title").textContent = `Loading ${names[provider] || "ad"}...`;
 }
@@ -209,6 +213,9 @@ async function showProviderAd(provider) {
   }
   if (provider === "monetag") {
     return showMonetagAd();
+  }
+  if (provider === "directlink" || provider === "adsterra") {
+    return showDirectLinkAd();
   }
   throw unavailableError(`Unknown ad provider: ${provider}`);
 }
@@ -268,6 +275,33 @@ function loadMonetagSdk() {
     document.head.appendChild(script);
   });
   return monetagLoadPromise;
+}
+
+async function showDirectLinkAd() {
+  if (!directAdUrl) {
+    throw unavailableError("Direct ad link is not configured.");
+  }
+
+  openAdLink(directAdUrl);
+  for (let remaining = directWait; remaining > 0; remaining -= 1) {
+    document.querySelector("#step-loading .title").textContent = "Sponsor opened";
+    document.querySelector("#step-loading .subtitle").textContent =
+      `Return here in ${remaining}s to unlock your download.`;
+    await sleep(1000);
+  }
+  return { done: true, provider: "directlink" };
+}
+
+function openAdLink(url) {
+  if (tg?.openLink) {
+    tg.openLink(url, { try_instant_view: false });
+    return;
+  }
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function isProviderUnavailable(error) {
