@@ -91,7 +91,7 @@ body {
 <body>
 <div class="container">
   <div id="step-wait" class="hidden">
-    <div class="logo">▶</div>
+    <div class="logo">&gt;</div>
     <div class="title">EULER Download Manager</div>
     <div class="subtitle">Watch the rewarded ad to unlock this download.</div>
     <button id="btn-watch" class="btn btn-primary" onclick="watchAd()">
@@ -108,7 +108,7 @@ body {
   </div>
 
   <div id="step-done" class="hidden">
-    <div class="success-icon">✓</div>
+    <div class="success-icon">OK</div>
     <div class="title">Ad Complete</div>
     <div class="subtitle">Your download is unlocked.</div>
     <button id="btn-get-video" class="btn btn-primary" onclick="finishUnlock()">
@@ -134,18 +134,8 @@ const params = new URLSearchParams(window.location.search);
 const token = params.get("token") || "";
 const apiBase = (params.get("api") || "").replace(/\/$/, "");
 const botUsername = params.get("bot") || "Eulerdownloadmanagerbot";
-const providers = (params.get("providers") || "aads")
-  .split(",")
-  .map((provider) => provider.trim().toLowerCase())
-  .filter(Boolean);
-const monetagZone = params.get("monetagZone") || "";
-const monetagSdk = params.get("monetagSdk") || "";
-const monetagFunction = params.get("monetagFunction") || (monetagZone ? `show_${monetagZone}` : "");
 const aadsUnit = params.get("aadsUnit") || "";
 const aadsWait = Math.max(8, Math.min(60, Number(params.get("aadsWait") || "15")));
-const directAdUrl = params.get("directAdUrl") || "";
-const directWait = Math.max(5, Math.min(60, Number(params.get("directWait") || "12")));
-let monetagLoadPromise = null;
 let pendingUnlockAction = "ad_done";
 
 if (tg) {
@@ -194,93 +184,13 @@ async function watchAd() {
   setWatchButtonLoading(true);
   showStep("step-loading");
 
-  const attempts = [];
-  for (const provider of providers) {
-    try {
-      updateLoadingText(provider);
-      await showProviderAd(provider);
-      showUnlockButton("ad_done", "Ad completed. Tap below to get your video.");
-      return;
-    } catch (error) {
-      console.warn(`${provider} failed:`, error);
-      attempts.push({ provider, error });
-      if (isUserCancelled(error)) {
-        showError("Ad was not completed. Please watch the ad to unlock your download.");
-        return;
-      }
-    }
+  try {
+    await showAadsAd();
+    showUnlockButton("ad_done", "Ad completed. Tap below to get your video.");
+  } catch (error) {
+    console.warn("A-ADS failed:", error);
+    showUnlockButton("ad_unavailable", "Sponsor is not available right now. Tap below to get your video.");
   }
-
-  if (attempts.length > 0 && attempts.every(({ error }) => isProviderUnavailable(error))) {
-    showUnlockButton("ad_unavailable", "No ad is available right now. Tap below to get your video.");
-    return;
-  }
-
-  showError("No ad provider could start right now. Please try again.");
-}
-
-function updateLoadingText(provider) {
-  const names = {
-    aads: "Sponsor",
-    monetag: "Monetag",
-    directlink: "Sponsor",
-    adsterra: "Sponsor"
-  };
-  document.querySelector("#step-loading .subtitle").textContent = "Please keep this window open.";
-  document.querySelector("#step-loading .title").textContent = `Loading ${names[provider] || "ad"}...`;
-}
-
-async function showProviderAd(provider) {
-  if (provider === "aads") {
-    return showAadsAd();
-  }
-  if (provider === "monetag") {
-    return showMonetagAd();
-  }
-  if (provider === "directlink" || provider === "adsterra") {
-    return showDirectLinkAd();
-  }
-  throw unavailableError(`Unknown ad provider: ${provider}`);
-}
-
-async function showMonetagAd() {
-  if (!monetagZone || !monetagSdk || !monetagFunction) {
-    throw unavailableError("Monetag is not configured.");
-  }
-
-  await loadMonetagSdk();
-  const showAd = window[monetagFunction];
-  if (typeof showAd !== "function") {
-    throw unavailableError("Monetag SDK function is not available.");
-  }
-
-  return showAd({
-    type: "end",
-    ymid: token,
-    requestVar: "download_unlock",
-    catchIfNoFeed: true
-  });
-}
-
-function loadMonetagSdk() {
-  if (typeof window[monetagFunction] === "function") {
-    return Promise.resolve();
-  }
-  if (monetagLoadPromise) {
-    return monetagLoadPromise;
-  }
-
-  monetagLoadPromise = new Promise((resolve, reject) => {
-    const script = document.createElement("script");
-    script.src = monetagSdk;
-    script.async = true;
-    script.dataset.zone = monetagZone;
-    script.dataset.sdk = monetagFunction;
-    script.onload = resolve;
-    script.onerror = () => reject(unavailableError("Monetag SDK failed to load."));
-    document.head.appendChild(script);
-  });
-  return monetagLoadPromise;
 }
 
 async function showAadsAd() {
@@ -307,61 +217,12 @@ async function showAadsAd() {
   return { done: true, provider: "aads" };
 }
 
-async function showDirectLinkAd() {
-  if (!directAdUrl) {
-    throw unavailableError("Direct ad link is not configured.");
-  }
-
-  openAdLink(directAdUrl);
-  for (let remaining = directWait; remaining > 0; remaining -= 1) {
-    document.querySelector("#step-loading .title").textContent = "Sponsor opened";
-    document.querySelector("#step-loading .subtitle").textContent =
-      `Return here in ${remaining}s to unlock your download.`;
-    await sleep(1000);
-  }
-  return { done: true, provider: "directlink" };
-}
-
-function openAdLink(url) {
-  if (tg?.openLink) {
-    tg.openLink(url, { try_instant_view: false });
-    return;
-  }
-  window.open(url, "_blank", "noopener,noreferrer");
-}
-
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function clearAdFrame() {
   document.getElementById("ad-frame")?.replaceChildren();
-}
-
-function isProviderUnavailable(error) {
-  const message = String(error?.description || error?.message || error || "").toLowerCase();
-  return Boolean(error?.adUnavailable)
-    || message.includes("no ads")
-    || message.includes("no ad")
-    || message.includes("ads to display")
-    || message.includes("ad feed is empty")
-    || message.includes("no feed")
-    || message.includes("network error")
-    || message.includes("timeout")
-    || message.includes("sdk did not load")
-    || message.includes("failed to load")
-    || message.includes("not configured")
-    || message.includes("misconfigured");
-}
-
-function isUserCancelled(error) {
-  const message = String(error?.description || error?.message || error || "").toLowerCase();
-  return message.includes("skip")
-    || message.includes("skipped")
-    || message.includes("cancel")
-    || message.includes("cancelled")
-    || message.includes("canceled")
-    || message.includes("closed by user");
 }
 
 function unavailableError(message) {
