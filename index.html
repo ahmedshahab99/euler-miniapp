@@ -111,7 +111,10 @@ body {
   <div id="step-done" class="hidden">
     <div class="success-icon">✓</div>
     <div class="title">Ad Complete</div>
-    <div class="subtitle">Returning to the bot to deliver your download.</div>
+    <div class="subtitle">Your download is unlocked.</div>
+    <button id="btn-get-video" class="btn btn-primary" onclick="finishUnlock()">
+      Get Video
+    </button>
     <div class="status" id="status-done"></div>
   </div>
 
@@ -146,11 +149,13 @@ const directAdUrl = params.get("directAdUrl") || "";
 const directWait = Math.max(5, Math.min(60, Number(params.get("directWait") || "12")));
 let adController = null;
 let monetagLoadPromise = null;
+let pendingUnlockAction = "ad_done";
 
 if (tg) {
   tg.ready();
   tg.expand();
   tg.MainButton.hide();
+  tg.MainButton.onClick(finishUnlock);
 }
 
 showStep("step-wait");
@@ -164,6 +169,9 @@ function showStep(id) {
   });
   if (id !== "step-loading") {
     clearAdFrame();
+  }
+  if (id !== "step-done" && tg?.MainButton) {
+    tg.MainButton.hide();
   }
 }
 
@@ -194,9 +202,7 @@ async function watchAd() {
     try {
       updateLoadingText(provider);
       await showProviderAd(provider);
-      showStep("step-done");
-      document.getElementById("status-done").textContent = "Ad completed. Opening the bot.";
-      await unlockDownload();
+      showUnlockButton("ad_done", "Ad completed. Tap below to get your video.");
       return;
     } catch (error) {
       console.warn(`${provider} failed:`, error);
@@ -209,9 +215,7 @@ async function watchAd() {
   }
 
   if (attempts.length > 0 && attempts.every(({ error }) => isProviderUnavailable(error))) {
-    showStep("step-done");
-    document.getElementById("status-done").textContent = "No ad is available right now. Opening the bot.";
-    returnToBot("ad_unavailable");
+    showUnlockButton("ad_unavailable", "No ad is available right now. Tap below to get your video.");
     return;
   }
 
@@ -390,9 +394,32 @@ function unavailableError(message) {
   return error;
 }
 
-async function unlockDownload() {
+function showUnlockButton(action, message) {
+  pendingUnlockAction = action;
+  showStep("step-done");
+  document.getElementById("status-done").textContent = message;
+  const btn = document.getElementById("btn-get-video");
+  btn.disabled = false;
+  btn.textContent = "Get Video";
+  if (tg?.MainButton) {
+    tg.MainButton.setText("Get Video");
+    tg.MainButton.show();
+  }
+}
+
+async function finishUnlock() {
+  const btn = document.getElementById("btn-get-video");
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Opening bot...';
+  if (tg?.MainButton) {
+    tg.MainButton.hide();
+  }
+  await unlockDownload(pendingUnlockAction);
+}
+
+async function unlockDownload(action = "ad_done") {
   if (!apiBase) {
-    returnToBot();
+    returnToBot(action);
     return;
   }
 
@@ -412,7 +439,7 @@ async function unlockDownload() {
     setTimeout(() => tg?.close(), 700);
   } catch (error) {
     console.warn("Backend unlock failed, using Telegram deep link:", error);
-    returnToBot();
+    returnToBot(action);
   }
 }
 
