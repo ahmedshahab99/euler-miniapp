@@ -16,13 +16,13 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  overflow: hidden;
+  overflow-x: hidden;
 }
 .container {
   text-align: center;
   padding: 20px;
   width: 100%;
-  max-width: 400px;
+  max-width: 440px;
 }
 .logo { font-size: 48px; margin-bottom: 16px; }
 .title { font-size: 22px; font-weight: 700; margin-bottom: 8px; }
@@ -61,8 +61,18 @@ body {
 }
 .ad-frame {
   width: 100%;
-  min-height: 120px;
-  margin: 18px auto 0;
+  margin: 16px auto 0;
+}
+.ad-stack {
+  display: grid;
+  gap: 10px;
+}
+.ad-slot {
+  min-height: 92px;
+  padding: 8px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  background: rgba(255,255,255,0.035);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -70,7 +80,7 @@ body {
 .ad-frame iframe {
   border: 0;
   width: min(100%, 360px);
-  min-height: 100px;
+  min-height: 82px;
   overflow: hidden;
   display: block;
 }
@@ -86,6 +96,22 @@ body {
 @keyframes spin { to { transform: rotate(360deg); } }
 .hidden { display: none !important; }
 .success-icon { font-size: 64px; margin-bottom: 16px; }
+@media (max-height: 720px) {
+  body {
+    justify-content: flex-start;
+  }
+  .container {
+    padding-top: 16px;
+    padding-bottom: 16px;
+  }
+  .logo {
+    font-size: 32px;
+    margin-bottom: 10px;
+  }
+  .subtitle {
+    margin-bottom: 18px;
+  }
+}
 </style>
 </head>
 <body>
@@ -135,6 +161,13 @@ const token = params.get("token") || "";
 const apiBase = (params.get("api") || "").replace(/\/$/, "");
 const botUsername = params.get("bot") || "Eulerdownloadmanagerbot";
 const aadsUnit = params.get("aadsUnit") || "";
+const aadsUnits = (params.get("aadsUnits") || aadsUnit)
+  .split(",")
+  .map((unit) => unit.trim())
+  .filter(Boolean);
+while (aadsUnits.length > 0 && aadsUnits.length < 3) {
+  aadsUnits.push(aadsUnits[0]);
+}
 const aadsWait = Math.max(8, Math.min(60, Number(params.get("aadsWait") || "15")));
 let pendingUnlockAction = "ad_done";
 
@@ -194,19 +227,29 @@ async function watchAd() {
 }
 
 async function showAadsAd() {
-  if (!aadsUnit) {
+  if (aadsUnits.length === 0) {
     throw unavailableError("A-ADS unit is not configured.");
   }
 
-  const frame = document.createElement("iframe");
-  frame.dataset.aa = aadsUnit;
-  frame.src = `https://acceptable.a-ads.com/${encodeURIComponent(aadsUnit)}/?size=Adaptive`;
-  frame.loading = "eager";
-  frame.referrerPolicy = "no-referrer-when-downgrade";
-  frame.title = "Sponsored ad";
+  const stack = document.createElement("div");
+  stack.className = "ad-stack";
+  aadsUnits.slice(0, 3).forEach((unit, index) => {
+    const slot = document.createElement("div");
+    slot.className = "ad-slot";
+
+    const frame = document.createElement("iframe");
+    frame.dataset.aa = unit;
+    frame.src = `https://acceptable.a-ads.com/${encodeURIComponent(unit)}/?size=Adaptive`;
+    frame.loading = "eager";
+    frame.referrerPolicy = "no-referrer-when-downgrade";
+    frame.title = `Sponsored ad ${index + 1}`;
+
+    slot.appendChild(frame);
+    stack.appendChild(slot);
+  });
 
   const adFrame = document.getElementById("ad-frame");
-  adFrame.replaceChildren(frame);
+  adFrame.replaceChildren(stack);
 
   for (let remaining = aadsWait; remaining > 0; remaining -= 1) {
     document.querySelector("#step-loading .title").textContent = "Sponsor";
