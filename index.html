@@ -298,29 +298,44 @@ async function finishUnlock() {
 }
 
 async function unlockDownload(action = "ad_done") {
-  if (!apiBase) {
-    returnToBot(action);
-    return;
-  }
-
-  try {
-    const response = await fetch(`${apiBase}/ad_done?token=${encodeURIComponent(token)}`, {
-      method: "GET",
-      mode: "cors",
-      cache: "no-store"
-    });
-    const payload = await response.json();
-
-    if (!response.ok || !payload.ok) {
-      throw new Error(payload.error || "The unlock session expired. Please request the download again.");
+  // 1. Preferred path: send ad-completion to the bot via tg.sendData().
+  //    Telegram delivers this as a service message that the bot picks up
+  //    through its MessageKind::WebAppData handler — no redirects needed.
+  if (tg?.sendData) {
+    try {
+      tg.sendData(JSON.stringify({ action, token }));
+      document.getElementById("status-done").textContent = "Done. You can close this window.";
+      setTimeout(() => tg.close(), 700);
+      return;
+    } catch (error) {
+      console.warn("tg.sendData failed, falling back to backend API:", error);
     }
-
-    document.getElementById("status-done").textContent = "Done. You can close this window.";
-    setTimeout(() => tg?.close(), 700);
-  } catch (error) {
-    console.warn("Backend unlock failed, using Telegram deep link:", error);
-    returnToBot(action);
   }
+
+  // 2. Direct backend API (works when PUBLIC_BASE_URL is set + same-origin)
+  if (apiBase) {
+    try {
+      const response = await fetch(`${apiBase}/ad_done?token=${encodeURIComponent(token)}`, {
+        method: "GET",
+        mode: "cors",
+        cache: "no-store"
+      });
+      const payload = await response.json();
+
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.error || "The unlock session expired. Please request the download again.");
+      }
+
+      document.getElementById("status-done").textContent = "Done. You can close this window.";
+      setTimeout(() => tg?.close(), 700);
+      return;
+    } catch (error) {
+      console.warn("Backend unlock failed, using Telegram deep link:", error);
+    }
+  }
+
+  // 3. Last resort: open a Telegram deep link so the bot receives /start
+  returnToBot(action);
 }
 
 function returnToBot(action = "ad_done") {
