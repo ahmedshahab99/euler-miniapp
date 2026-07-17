@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Universal Downloader</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <!-- Full-Screen Interstitial Ad (shown when opened with ?url= param) -->
+  <div id="interstitial-overlay" class="interstitial-overlay hidden">
+    <div class="interstitial-wrapper">
+      <div class="interstitial-header">
+        <span class="interstitial-badge">ADVERTISEMENT</span>
+      </div>
+      <div class="interstitial-ad-area">
+        <iframe id="ad-iframe" data-aa='2445630' src='//acceptable.a-ads.com/2445630/?size=Adaptive'
+          style='border:0; padding:0; width:100%; max-width:400px; height:auto; min-height:250px; overflow:hidden; display:block; margin:auto'></iframe>
+      </div>
+      <div class="interstitial-footer">
+        <div id="interstitial-progress" class="interstitial-progress">
+          <div id="interstitial-bar" class="interstitial-bar"></div>
+        </div>
+        <div id="interstitial-text" class="interstitial-text">Please wait <span id="int-countdown">5</span>s...</div>
+        <button id="btn-continue" class="btn-continue hidden" onclick="continueToBot()">Continue to Download</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main App (normal mode - when opened without ?url=) -->
+  <header class="header">
+    <div class="header-inner">
+      <div class="logo">
+        <span class="logo-icon">&#11044;</span>
+        <span class="logo-text">Universal Downloader</span>
+      </div>
+      <div class="header-actions">
+        <a href="https://github.com" target="_blank" class="btn-github" title="GitHub">
+          <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        </a>
+        <button id="btn-premium" class="btn-premium" onclick="showPremiumModal()">
+          <span class="premium-icon">&#9733;</span> PRO
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <section class="hero">
+    <div class="hero-content">
+      <h1 class="hero-title">Download Any Video</h1>
+      <p class="hero-subtitle">YouTube, TikTok, Reddit, Twitter, Instagram + 1000 more sites</p>
+    </div>
+  </section>
+
+  <section class="download-section">
+    <div class="input-group">
+      <input type="url" id="url-input" placeholder="Paste video URL here..." autocomplete="off" spellcheck="false">
+      <button id="btn-download" class="btn-download" onclick="startDownload()">
+        <span id="btn-text">Download</span>
+        <span id="btn-spinner" class="spinner hidden"></span>
+      </button>
+    </div>
+    <div class="supported-sites">
+      <span class="site-badge">YouTube</span>
+      <span class="site-badge">TikTok</span>
+      <span class="site-badge">Reddit</span>
+      <span class="site-badge">Twitter/X</span>
+      <span class="site-badge">Instagram</span>
+      <span class="site-badge">+1000 more</span>
+    </div>
+  </section>
+
+  <section id="ad-banner" class="ad-banner hidden">
+    <div class="ad-container">
+      <div class="ad-label">ADVERTISEMENT</div>
+      <div id="ad-content" class="ad-content">
+        <div style="width:100%;margin:auto;position:relative;z-index:99998;">
+          <iframe data-aa='2445630' src='//acceptable.a-ads.com/2445630/?size=Adaptive'
+            style='border:0; padding:0; width:70%; height:auto; overflow:hidden; display:block; margin:auto'></iframe>
+        </div>
+      </div>
+      <div id="ad-timer" class="ad-timer">
+        Skip in <span id="ad-countdown">5</span>s
+      </div>
+      <button id="btn-skip-ad" class="btn-skip-ad hidden" onclick="skipAd()">Skip Ad &gt;&gt;</button>
+    </div>
+  </section>
+
+  <section id="progress-section" class="progress-section hidden">
+    <div class="progress-card">
+      <div class="progress-info">
+        <div id="progress-title" class="progress-title">Processing...</div>
+        <div id="progress-status" class="progress-status">Extracting video info</div>
+      </div>
+      <div class="progress-bar-container">
+        <div id="progress-bar" class="progress-bar"></div>
+      </div>
+      <div id="progress-detail" class="progress-detail"></div>
+    </div>
+  </section>
+
+  <section id="formats-section" class="formats-section hidden">
+    <div class="formats-card">
+      <div id="video-info" class="video-info"></div>
+      <div class="formats-header"><h3>Select Quality</h3></div>
+      <div id="formats-list" class="formats-list"></div>
+      <button id="btn-download-selected" class="btn-download-selected" onclick="downloadSelected()">Download Selected</button>
+    </div>
+  </section>
+
+  <section id="history-section" class="history-section">
+    <div class="history-header">
+      <h3>Recent Downloads</h3>
+      <button class="btn-clear" onclick="clearHistory()">Clear</button>
+    </div>
+    <div id="history-list" class="history-list">
+      <div class="empty-state">
+        <div class="empty-icon">&#128229;</div>
+        <p>Paste a URL above to start downloading</p>
+      </div>
+    </div>
+  </section>
+
+  <div id="premium-modal" class="modal hidden">
+    <div class="modal-overlay" onclick="closePremiumModal()"></div>
+    <div class="modal-content">
+      <button class="modal-close" onclick="closePremiumModal()">&times;</button>
+      <div class="premium-header">
+        <div class="premium-badge-large">&#9733;</div>
+        <h2>Upgrade to PRO</h2>
+        <p>Unlock the full power of Universal Downloader</p>
+      </div>
+      <div class="premium-features">
+        <div class="premium-feature"><span class="feature-check">&#10003;</span><span>No Ads — Pure download experience</span></div>
+        <div class="premium-feature"><span class="feature-check">&#10003;</span><span>Priority Queue — Faster downloads</span></div>
+        <div class="premium-feature"><span class="feature-check">&#10003;</span><span>Max Quality — Download up to 4K</span></div>
+        <div class="premium-feature"><span class="feature-check">&#10003;</span><span>Batch Downloads — Multiple URLs at once</span></div>
+        <div class="premium-feature"><span class="feature-check">&#10003;</span><span>Audio Extract — MP3 from any video</span></div>
+        <div class="premium-feature"><span class="feature-check">&#10003;</span><span>No file size limits</span></div>
+      </div>
+      <div class="premium-plans">
+        <button class="plan-btn" onclick="purchasePlan('monthly')">
+          <div class="plan-period">Monthly</div>
+          <div class="plan-price">49 Stars</div>
+          <div class="plan-sub">/month</div>
+        </button>
+        <button class="plan-btn plan-popular" onclick="purchasePlan('yearly')">
+          <div class="plan-popular-badge">BEST VALUE</div>
+          <div class="plan-period">Yearly</div>
+          <div class="plan-price">399 Stars</div>
+          <div class="plan-sub">/year (Save 32%)</div>
+        </button>
+        <button class="plan-btn" onclick="purchasePlan('lifetime')">
+          <div class="plan-period">Lifetime</div>
+          <div class="plan-price">999 Stars</div>
+          <div class="plan-sub">One-time</div>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <div class="sticky-bottom-ad">
+    <iframe data-aa='2445630' src='//acceptable.a-ads.com/2445630/?size=Adaptive'
+      style='border:0; padding:0; width:728px; max-width:100%; height:90px; overflow:hidden; display:block; margin:auto'></iframe>
+  </div>
+
+  <footer class="footer">
+    <a href="https://github.com" target="_blank">GitHub</a>
+    <span class="footer-sep">&middot;</span>
+    <span>Universal Downloader Bot</span>
+  </footer>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
