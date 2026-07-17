@@ -97,31 +97,22 @@ function continueToBot(encodedUrl) {
   const url = decodeURIComponent(encodedUrl);
   console.log('[MiniApp] continueToBot called, url:', url, 'tg:', !!tg);
 
-  // Primary path: POST to the bot's /api/webapp-complete endpoint (same
-  // origin). This is the verified-working flow: the server downloads and
-  // uploads the result to the chat. tg.sendData is only used as a fallback
-  // if the fetch fails, because in some clients sendData silently does
-  // nothing (no error thrown), which would leave the button stuck.
+  // Trigger the download on the server (fire-and-forget). The server handles
+  // extraction/download/upload; we don't wait for it here.
   const initData = (tg && tg.initData) ? tg.initData : '';
   fetch('/api/webapp-complete', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ url, init_data: initData })
   })
-  .then(res => res.json())
-  .then(data => {
-    console.log('[MiniApp] API response:', data);
-    showToast(data.message || 'Download started');
-    setTimeout(() => { try { tg.close(); } catch (e) {} }, 700);
-  })
-  .catch(err => {
-    console.error('[MiniApp] fetch failed, trying sendData:', err);
-    if (tg && typeof tg.sendData === 'function') {
-      try { tg.sendData(url); } catch (e) { console.error('[MiniApp] sendData error', e); }
-    }
-    showToast('Starting download...');
-    setTimeout(() => { try { tg.close(); } catch (e) {} }, 700);
-  });
+  .catch(err => console.error('[MiniApp] webapp-complete fetch failed:', err));
+
+  // Return to the bot conversation immediately so the user can watch the
+  // download arrive in chat. The download keeps running server-side.
+  setTimeout(() => {
+    try { if (tg && typeof tg.close === 'function') tg.close(); } catch (e) {}
+    try { window.close(); } catch (e) {}
+  }, 400);
 }
 
 // === NORMAL MODE ===
