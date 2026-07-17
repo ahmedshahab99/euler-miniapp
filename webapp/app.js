@@ -67,7 +67,6 @@ function showInterstitialAdMode(url) {
           <div class="interstitial-bar" id="int-bar"></div>
         </div>
         <div class="interstitial-text" id="int-text">Please wait <span id="int-countdown">5</span>s...</div>
-        <button class="btn-continue hidden" id="btn-continue" onclick="continueToBot('${encodeURIComponent(url)}')">Continue to Download</button>
       </div>
     </div>
   `;
@@ -77,7 +76,6 @@ function showInterstitialAdMode(url) {
   const countdownEl = document.getElementById('int-countdown');
   const textEl = document.getElementById('int-text');
   const barEl = document.getElementById('int-bar');
-  const continueBtn = document.getElementById('btn-continue');
 
   const interval = setInterval(() => {
     countdown--;
@@ -85,11 +83,9 @@ function showInterstitialAdMode(url) {
     if (barEl) barEl.style.width = ((5 - countdown) / 5 * 100) + '%';
     if (countdown <= 0) {
       clearInterval(interval);
-      if (textEl) textEl.innerHTML = '<span style="color:var(--success)">&#10003; Ad complete!</span>';
-      if (continueBtn) continueBtn.classList.remove('hidden');
-      // Auto-continue so the download starts even if the button is unreachable
-      // (e.g. clipped on small screens). The guard in continueToBot prevents
-      // a double trigger if the user also taps the button.
+      if (textEl) textEl.innerHTML = '<span style="color:var(--success)">&#10003; Ad complete! Starting download&#8230;</span>';
+      // Auto-continue: the download starts automatically (no manual button),
+      // matching the bot's "your download starts automatically" message.
       setTimeout(() => continueToBot(encodeURIComponent(url)), 700);
     }
   }, 1000);
