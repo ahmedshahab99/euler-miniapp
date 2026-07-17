@@ -101,45 +101,31 @@ function continueToBot(encodedUrl) {
   const url = decodeURIComponent(encodedUrl);
   console.log('[MiniApp] continueToBot called, url:', url, 'tg:', !!tg);
 
-  // Preferred path: send the URL back to the bot as web_app_data.
-  // The bot then runs its full download pipeline (extraction, caching,
-  // upload with progress/error feedback) and replies in the chat.
-  if (tg && typeof tg.sendData === 'function') {
-    try {
-      console.log('[MiniApp] Sending URL back to bot via sendData');
-      tg.sendData(url);
-      showToast('Ad complete! Starting download...');
-      setTimeout(() => { try { tg.close(); } catch (e) {} }, 600);
-      return;
-    } catch (e) {
-      console.error('[MiniApp] sendData failed:', e);
+  // Primary path: POST to the bot's /api/webapp-complete endpoint (same
+  // origin). This is the verified-working flow: the server downloads and
+  // uploads the result to the chat. tg.sendData is only used as a fallback
+  // if the fetch fails, because in some clients sendData silently does
+  // nothing (no error thrown), which would leave the button stuck.
+  const initData = (tg && tg.initData) ? tg.initData : '';
+  fetch('/api/webapp-complete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url, init_data: initData })
+  })
+  .then(res => res.json())
+  .then(data => {
+    console.log('[MiniApp] API response:', data);
+    showToast(data.message || 'Download started');
+    setTimeout(() => { try { tg.close(); } catch (e) {} }, 700);
+  })
+  .catch(err => {
+    console.error('[MiniApp] fetch failed, trying sendData:', err);
+    if (tg && typeof tg.sendData === 'function') {
+      try { tg.sendData(url); } catch (e) { console.error('[MiniApp] sendData error', e); }
     }
-  }
-
-  // Fallback for non-Telegram (browser) environments: keep old endpoint.
-  if (tg) {
-    console.log('[MiniApp] sendData unavailable, calling /api/webapp-complete');
-    const initData = tg.initData || '';
-    fetch('/api/webapp-complete', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url, init_data: initData })
-    })
-    .then(res => res.json())
-    .then(data => {
-      console.log('[MiniApp] API response:', data);
-      showToast(data.message || 'Download started');
-      setTimeout(() => tg.close(), 500);
-    })
-    .catch(err => {
-      console.error('[MiniApp] API error:', err);
-      showToast('Error starting download');
-      setTimeout(() => tg.close(), 500);
-    });
-  } else {
-    console.log('[MiniApp] tg not available, closing window');
-    window.close();
-  }
+    showToast('Starting download...');
+    setTimeout(() => { try { tg.close(); } catch (e) {} }, 700);
+  });
 }
 
 // === NORMAL MODE ===
