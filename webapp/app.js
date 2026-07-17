@@ -87,11 +87,17 @@ function showInterstitialAdMode(url) {
       clearInterval(interval);
       if (textEl) textEl.innerHTML = '<span style="color:var(--success)">&#10003; Ad complete!</span>';
       if (continueBtn) continueBtn.classList.remove('hidden');
+      // Auto-continue so the download starts even if the button is unreachable
+      // (e.g. clipped on small screens). The guard in continueToBot prevents
+      // a double trigger if the user also taps the button.
+      setTimeout(() => continueToBot(encodeURIComponent(url)), 700);
     }
   }, 1000);
 }
 
 function continueToBot(encodedUrl) {
+  if (window.__adCompleted) return;
+  window.__adCompleted = true;
   const url = decodeURIComponent(encodedUrl);
   console.log('[MiniApp] continueToBot called, url:', url, 'tg:', !!tg);
 

@@ -787,6 +787,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow-y: auto;
 }
 .interstitial-wrapper {
   width: 100%;
@@ -794,7 +795,8 @@ body {
   padding: 16px;
   display: flex;
   flex-direction: column;
-  height: 100%;
+  min-height: 100%;
+  margin: auto;
 }
 .interstitial-header {
   display: flex;
